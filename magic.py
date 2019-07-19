@@ -3,6 +3,7 @@
 import json
 import csv
 import os
+import random
 from colors import *
 
 DECK_DIR = 'decks/'
@@ -138,6 +139,111 @@ def save_map(save_fid):
   card_map = load_card_map()
   save_json( save_fid, card_map )
 
+def load_deck(deck_name):
+  fid = deck_name+'.deck'
+  try:
+    f = open(DECK_DIR+fid)
+  except:
+    print('No Deck: {} '.format(fid))
+    deck = None
+    return deck
+  deck = []
+  for line in f:
+    if line.strip() == 'SIDEBOARD':
+      break
+    if len(line.split()) > 0:
+      n = line.split()[0]
+      if n.isdigit():
+        card_name = line[len(n)+1:].strip()
+        for i in range(int(n)):
+          deck.append(card_name)
+  f.close()
+  return deck
+
+def deck_stats(cards,deck_name):
+  deck = load_deck(deck_name)
+  if not deck: return 
+  n = len(deck)
+  freqs = [(name,deck.count(name)) for name in set(deck)]
+  order = lambda c: cards[c[0]]['convertedManaCost']
+  freqs.sort(key=order)
+  for name,freq in freqs:
+    card = cards[name]
+    percent = int(freq/(n+0.0)*100)
+    percent_f = (' ' if len(str(percent)) == 1 else '')+str(percent) 
+    freq_f =  (' ' if len(str(freq)) == 1 else '')+str(freq) 
+    colorID = '({})'.format(','.join(card['colorIdentity']))
+    mana = colorID if 'manaCost' not in card else card['manaCost']
+    mana_f = (' '*(15-len(mana)))+mana
+    print('{}% - {} - {} {}'.format(percent_f,freq_f,mana_f,name))
+  freqs = {}
+  for name in deck:
+    card = cards[name]
+    cmc = card['convertedManaCost'] 
+    if cmc not in freqs: 
+      keys = ['L','C','S','I','A','E','P','Total']
+      freqs[cmc] = {k:0 for k in keys}
+    freqs[cmc]['Total'] += 1
+    types = card['types']
+    if 'Land' in types: freqs[cmc]['L'] += 1
+    elif 'Planeswalker' in types: freqs[cmc]['P'] += 1
+    elif 'Creature' in types: freqs[cmc]['C'] += 1
+    elif 'Instant' in types: freqs[cmc]['I'] += 1
+    elif 'Sorcery' in types: freqs[cmc]['S'] += 1
+    elif 'Artifact' in types: freqs[cmc]['A'] += 1
+    elif 'Enchantment' in types: freqs[cmc]['E'] += 1
+  
+  cost_freqs = freqs.items()
+  cost_freqs.sort(key=lambda e:e[0])
+  print('Converted Mana Cost Frequencies:')
+  print(' Cost | L | C | S | I | A | E | P | %')
+  for cmc,freqs in cost_freqs:
+    cmc_f = ' '*(4-len(str(int(cmc)))) + str(int(cmc)) 
+    format_freq = lambda e:' '*(3-len(e))+e
+    l=format_freq(str(freqs['L']) if freqs['L'] else ' ')
+    c=format_freq(str(freqs['C']) if freqs['C'] else ' ')
+    s=format_freq(str(freqs['S']) if freqs['S'] else ' ')
+    i=format_freq(str(freqs['I']) if freqs['I'] else ' ')
+    a=format_freq(str(freqs['A']) if freqs['A'] else ' ')
+    e=format_freq(str(freqs['E']) if freqs['E'] else ' ')
+    p=format_freq(str(freqs['P']) if freqs['P'] else ' ')
+    prop_f = ' '+str(int(((freqs['Total']+.0) / n)*100)) + '%'
+    cols = (' {}'*9)
+    print(cols.format(cmc_f,l,c,s,i,a,e,p,prop_f))
+  print('{} Cards'.format(len(deck)))
+
+def test_hand(cards,deck_name):
+  fid = deck_name+'.deck'
+  try:
+    f = open(DECK_DIR+fid)
+  except:
+    print('No Deck: {} '.format(fid))
+    return
+  test_deck = []
+  for line in f:
+    if line.strip() == 'SIDEBOARD':
+      break
+    if len(line.split()) > 0:
+      n = line.split()[0]
+      if n.isdigit():
+        card_name = line[len(n)+1:].strip()
+        for i in range(int(n)):
+          test_deck.append(card_name)
+  random.shuffle(test_deck)
+  for i in range(7):
+    card_name = test_deck.pop()
+    print(format_card_one_line(cards, card_name))
+  f.close()
+
+def format_card_one_line(cards,card_name):
+  if card_name not in cards:
+    print('Card Does Not Exist: {}'.format(card_name))
+    return
+  card = cards[card_name]
+  colorID = '({})'.format(','.join(card['colorIdentity']))
+  manaCost = colorID if 'manaCost' not in card else card['manaCost']
+  return '{} {}'.format(card['name'],manaCost)
+
 def magic_prompt():
   val = '' 
   cards = load_cards()
@@ -162,7 +268,7 @@ def magic_prompt():
       card_map = load_card_map()
       sorted_map = sorted([(int(i),c) for i,c in card_map.items()])
       for card_id, card_name in sorted_map:
-        print('{} : {}'.format(card_id, card_name))
+        print(str(card_id) + ' : '+format_card_one_line(cards, card_name))
     elif val == 'LIST SAVED':
       list_saved()  
     elif val == 'CLEAR':
@@ -178,6 +284,9 @@ def magic_prompt():
     elif val.split()[0] == 'LOAD':
       deck_name = val[5:] 
       load_deck(deck_name+'.deck')
+    elif val.split()[0] == 'STATS':
+      deck_name = val[6:] 
+      deck_stats(cards, deck_name)
     elif val.split()[0] == 'LOADMAP':
       load_name = val[8:] 
       card_map = load_json(load_name+CARD_MAP_SUFFIX+'.json')
@@ -195,6 +304,9 @@ def magic_prompt():
         print(name)
       print('Total: {}'.format(len(filtered_cards)))
       print('')
+    elif val.split()[0] == 'TEST':
+      deck_name = val[4:].strip()
+      test_hand(cards, deck_name)
     elif val.split()[0] == 'FULL':
       name = val[4:].strip()
       show_full_card_details(cards, name)
