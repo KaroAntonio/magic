@@ -30,7 +30,7 @@ def load_cards():
  cards.update(load_json(CUSTOM_CARDS_FID))
  return cards
 
-def load_deck(fid):
+def load_deck_to_list(fid):
   card_map = load_card_map()
   max_idx = 1 if not card_map else max(map(int,card_map.keys()))+1
   idx = max_idx
@@ -283,7 +283,7 @@ def magic_prompt():
       save_map(save_name+CARD_MAP_SUFFIX+'.json')
     elif val.split()[0] == 'LOAD':
       deck_name = val[5:] 
-      load_deck(deck_name+'.deck')
+      load_deck_to_list(deck_name+'.deck')
     elif val.split()[0] == 'STATS':
       deck_name = val[6:] 
       deck_stats(cards, deck_name)
