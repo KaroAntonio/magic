@@ -4,4 +4,6 @@ decks are in decks/
 
 TODO
 save TRANSFORM mappings 
+transforms:
+Legion's Landing -> Adanto, the First Fort
 support double cards
