@@ -6,6 +6,7 @@ decks are in decks/
 https://decks.tcgplayer.com/magic/deck/search?location=2018-world-championships
 
 TODO
+
 save TRANSFORM mappings 
 transforms:
 Legion's Landing -> Adanto, the First Fort

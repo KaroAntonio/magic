@@ -7,10 +7,12 @@ import random
 from colors import *
 
 DECK_DIR = 'decks/'
+DECK_SUFFIX = '.deck'
 ALL_CARDS_FID = 'magic_all_cards.json'
 CUSTOM_CARDS_FID = 'magic_custom_cards.json'
 CARD_MAP_FID = 'magic_card_map.json'
 CARD_MAP_SUFFIX = '.magiccardmap'
+DATA_FID = 'data.json'
 
 def load_json(fid,default={}):
   try:
@@ -19,6 +21,20 @@ def load_json(fid,default={}):
   except:
     data = default
   return data
+
+def transform(cardname):
+  data = load_json(DATA_FID) 
+  if cardname in data['transforms']:
+    return data['transforms'][cardname]
+  else:
+    print('No Transform Exists for: {}'.format(cardname))
+    return None
+
+def save_transform(card_1,card_2):
+  data = load_json(DATA_FID) 
+  data['transforms'][card_1] = card_2
+  data['transforms'][card_2] = card_1
+  save_json(DATA_FID, data)
 
 def save_json(fid, data):
   with open(fid, 'w') as f:
@@ -57,13 +73,21 @@ def load_card_map():
   return load_json(CARD_MAP_FID)
 
 def format_card(cards, cardname):
-  return format_card_compact(cards, cardname)
+  if '//' in cardname:
+    print(white(cardname))
+    card_1 = cardname.split('//')[0].strip()
+    card_2 = cardname.split('//')[1].strip()
+    card_str = format_card_compact(cards,card_1)
+    card_str += format_card_compact(cards,card_2)
+  else:
+    card_str = format_card_compact(cards,cardname)
+  return card_str 
 
-def format_card_compact(cards, card_name):
-  if card_name not in cards:
-    print ('Card Not Present: {}'.format(card_name)) 
+def format_card_compact(cards, cardname):
+  if cardname not in cards:
+    print ('Card Not Present: {}'.format(cardname)) 
     return
-  c = cards[card_name]
+  c = cards[cardname]
   card_str = u''
   card_str+=u'---------------------\n'
   card_str+=white(c['name'])
@@ -130,6 +154,10 @@ def filter_cards(cards,filters):
     if hits == len(filters): new_cards[name] = card
   return new_cards
 
+def list_decks():
+   for fid in os.listdir('./decks'):
+     if DECK_SUFFIX in fid:
+       print(fid.split('.')[0])
 def list_saved():
    for fid in os.listdir('.'):
      if CARD_MAP_SUFFIX in fid:
@@ -160,25 +188,43 @@ def load_deck(deck_name):
   f.close()
   return deck
 
+def getManaCost(cards, cardname):
+  card = cards[cardname]
+  colorID = '({})'.format(','.join(card['colorIdentity']))
+  return colorID if 'manaCost' not in card else card['manaCost']
+
+def getConvertedManaCost(cards, cardname):
+  if '//' in cardname:
+    card_1 = cardname.split('//')[0].strip()
+    card_2 = cardname.split('//')[1].strip()
+    cost_1 = cards[card_1]['convertedManaCost']
+    cost_2 = cards[card_2]['convertedManaCost']
+    return cost_1+cost_2
+  else:
+    return cards[cardname]['convertedManaCost']
+
 def deck_stats(cards,deck_name):
   deck = load_deck(deck_name)
   if not deck: return 
   n = len(deck)
   freqs = [(name,deck.count(name)) for name in set(deck)]
-  order = lambda c: cards[c[0]]['convertedManaCost']
+  order = lambda c: getConvertedManaCost(cards,c[0])
   freqs.sort(key=order)
   for name,freq in freqs:
-    card = cards[name]
+    nameID = name.split('//')[0].strip() if '//' in name else name
+    card = cards[nameID]
     percent = int(freq/(n+0.0)*100)
     percent_f = (' ' if len(str(percent)) == 1 else '')+str(percent) 
     freq_f =  (' ' if len(str(freq)) == 1 else '')+str(freq) 
     colorID = '({})'.format(','.join(card['colorIdentity']))
+    typeID = card['types'][0][0]
     mana = colorID if 'manaCost' not in card else card['manaCost']
     mana_f = (' '*(15-len(mana)))+mana
-    print('{}% - {} - {} {}'.format(percent_f,freq_f,mana_f,name))
+    print('{}% - {} - {} {} {}'.format(percent_f,freq_f,mana_f,typeID,name))
   freqs = {}
   for name in deck:
-    card = cards[name]
+    nameID = name.split('//')[0].strip() if '//' in name else name
+    card = cards[nameID]
     cmc = card['convertedManaCost'] 
     if cmc not in freqs: 
       keys = ['L','C','S','I','A','E','P','Total']
@@ -186,12 +232,12 @@ def deck_stats(cards,deck_name):
     freqs[cmc]['Total'] += 1
     types = card['types']
     if 'Land' in types: freqs[cmc]['L'] += 1
-    elif 'Planeswalker' in types: freqs[cmc]['P'] += 1
     elif 'Creature' in types: freqs[cmc]['C'] += 1
-    elif 'Instant' in types: freqs[cmc]['I'] += 1
     elif 'Sorcery' in types: freqs[cmc]['S'] += 1
+    elif 'Instant' in types: freqs[cmc]['I'] += 1
     elif 'Artifact' in types: freqs[cmc]['A'] += 1
     elif 'Enchantment' in types: freqs[cmc]['E'] += 1
+    elif 'Planeswalker' in types: freqs[cmc]['P'] += 1
   
   cost_freqs = freqs.items()
   cost_freqs.sort(key=lambda e:e[0])
@@ -240,8 +286,7 @@ def format_card_one_line(cards,card_name):
     print('Card Does Not Exist: {}'.format(card_name))
     return
   card = cards[card_name]
-  colorID = '({})'.format(','.join(card['colorIdentity']))
-  manaCost = colorID if 'manaCost' not in card else card['manaCost']
+  manaCost = getManaCost(cards, card_name)
   return '{} {}'.format(card['name'],manaCost)
 
 def magic_prompt():
@@ -256,42 +301,69 @@ def magic_prompt():
     except:
       evaluated = None
 
-    if val == 'ALL':
+    if val == 'all':
       for name in cards: 
         print(name)
       print('')
-    elif val == 'MAPPED':
+    elif val == 'mapped':
       card_map = load_card_map()
       sorted_ids = sorted([int(e) for e in card_map.keys()])
       print(','.join([str(e) for e in sorted_ids]))
-    elif val == 'LIST':
+    elif val == 'list':
       card_map = load_card_map()
       sorted_map = sorted([(int(i),c) for i,c in card_map.items()])
       for card_id, card_name in sorted_map:
-        print(str(card_id) + ' : '+format_card_one_line(cards, card_name))
-    elif val == 'LIST SAVED':
+        if '//' in card_name:
+          card_1 = card_name.split('//')[0].strip()
+          card_2 = card_name.split('//')[1].strip()
+          formatted_1 = format_card_one_line(cards, card_1)
+          formatted_2 = format_card_one_line(cards, card_2)
+          formatted_card = formatted_1 + ' // ' + formatted_2
+        else:
+          formatted_card = format_card_one_line(cards, card_name)
+        print(str(card_id) + ' : '+formatted_card)
+    elif val == 'list transforms':
+      data = load_json(DATA_FID) 
+      for k,v in data['transforms'].items():
+        print('{} > {}'.format(k,v))
+    elif val == 'list decks':
+      list_decks() 
+    elif val == 'list saved':
       list_saved()  
-    elif val == 'CLEAR':
+    elif val == 'clear':
       confirmed = raw_input('Are you sure you want to clear all mappings? (y/n): ')
       if confirmed == 'y':
         card_map = {}
         save_json(CARD_MAP_FID,card_map)
     elif not val:
       continue
-    elif val.split()[0] == 'SAVE':
+    elif val.split()[0] == 'save':
       save_name = val[5:] 
       save_map(save_name+CARD_MAP_SUFFIX+'.json')
-    elif val.split()[0] == 'LOAD':
+    elif val.split()[0] == 'transform':
+      cardname = val[10:] 
+      transformed_cardname = transform(cardname)
+      print(format_card(cards, transformed_cardname))
+    elif val[0] == '>':
+      cardname = val[2:].strip()
+      transformed_cardname = transform(cardname)
+      print(format_card(cards, transformed_cardname))
+    elif '>' in val:
+      tokens = val.split('>')
+      card_1 = tokens[0].strip()
+      card_2 = tokens[1].strip()
+      save_transform(card_1, card_2)
+    elif val.split()[0] == 'load':
       deck_name = val[5:] 
       load_deck_to_list(deck_name+'.deck')
-    elif val.split()[0] == 'STATS':
+    elif val.split()[0] == 'stats':
       deck_name = val[6:] 
       deck_stats(cards, deck_name)
-    elif val.split()[0] == 'LOADMAP':
+    elif val.split()[0] == 'loadmap':
       load_name = val[8:] 
       card_map = load_json(load_name+CARD_MAP_SUFFIX+'.json')
       save_json(CARD_MAP_FID,card_map)
-    elif val == 'COLORS':
+    elif val == 'colors':
       print('W - white')
       print('U - blue')
       print('B - black')
@@ -304,10 +376,10 @@ def magic_prompt():
         print(name)
       print('Total: {}'.format(len(filtered_cards)))
       print('')
-    elif val.split()[0] == 'TEST':
+    elif val.split()[0] == 'test':
       deck_name = val[4:].strip()
       test_hand(cards, deck_name)
-    elif val.split()[0] == 'FULL':
+    elif val.split()[0] == 'full':
       name = val[4:].strip()
       show_full_card_details(cards, name)
     elif val.strip().isdigit():
@@ -327,10 +399,13 @@ def magic_prompt():
       save_json(CARD_MAP_FID,card_map)
     elif val=='exit':
       return
+    elif '//' in val:
+     pass 
     else:
       # assume input is a card name
-      print(format_card(cards,val.strip()))
-
+      cardname = val.strip()
+      print(format_card(cards, cardname))
+      
 if __name__ == '__main__':
   magic_prompt()      
        
