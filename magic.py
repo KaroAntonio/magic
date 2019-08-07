@@ -13,6 +13,50 @@ CUSTOM_CARDS_FID = 'magic_custom_cards.json'
 CARD_MAP_FID = 'magic_card_map.json'
 CARD_MAP_SUFFIX = '.magiccardmap'
 DATA_FID = 'data.json'
+PLAYER_DIR = 'players/'
+
+lists = ['library','hand','board','graveyard','exile']
+
+def clear_players():
+  for r, d, f in os.walk(PLAYER_DIR):
+    for fid in f:
+      if '.json' in fid:
+        os.remove(PLAYER_DIR+fid)
+
+def prompt_for_player(player):
+  while not player:
+    val = raw_input('Set Player: ').strip()
+    if os.path.isfile(PLAYER_DIR+val+'.json'):
+      return val
+    else:
+      print('Player {} does not exist'.format(val))
+
+def remove_card_from_player(player,card_id):
+  def f(data):
+    for list_name in lists:
+      if card_id in data[list_name]:
+        data[list_name].remove(card_id)
+        return True
+  return work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+
+def log_move(player,cmd):
+  def f(data):
+    data['history'].append(cmd)
+  work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+
+def init_player(player_id,deck_vals):
+  library = [str(e) for e in deck_vals]
+  random.shuffle(library)
+  player = {
+    'id':player_id,
+    'library':library[7:],
+    'hand':library[:7],
+    'board':[],
+    'graveyard':[],
+    'exile':[],
+    'history':[],
+  }
+  save_json(PLAYER_DIR+player_id+'.json',player)
 
 def load_json(fid,default={}):
   try:
@@ -21,6 +65,16 @@ def load_json(fid,default={}):
   except:
     data = default
   return data
+
+def save_json(fid, data):
+  with open(fid, 'w') as f:
+    json.dump(data, f) 
+
+def work_with(fid, callback):
+  data = load_json(fid)
+  res = callback(data) 
+  save_json(fid,data)
+  return res
 
 def transform(cardname):
   data = load_json(DATA_FID) 
@@ -35,10 +89,6 @@ def save_transform(card_1,card_2):
   data['transforms'][card_1] = card_2
   data['transforms'][card_2] = card_1
   save_json(DATA_FID, data)
-
-def save_json(fid, data):
-  with open(fid, 'w') as f:
-    json.dump(data, f) 
 
 def load_cards():
  cards = {}
@@ -55,6 +105,8 @@ def load_deck_to_list(fid):
   except:
     print('No Deck: {} '.format(fid))
     return
+
+  card_vals = []
   for line in f:
     if line.strip() == 'SIDEBOARD':
       break
@@ -63,11 +115,18 @@ def load_deck_to_list(fid):
       if n.isdigit():
         card_name = line[len(n)+1:].strip()
         for i in range(int(n)):
+          card_vals.append(idx)
           card_map[idx] = card_name 
           idx += 1
+  init_player(fid.split('.')[0],card_vals)
   print('Loaded {} Cards'.format(idx-max_idx))
   f.close()
   save_json(CARD_MAP_FID,card_map)
+
+def old_load_library(name,card_vals):
+  def f(data):
+    data['libraries'][name] = card_vals[:]
+  work_with(DATA_FID,f)
 
 def load_card_map():
   return load_json(CARD_MAP_FID)
@@ -292,19 +351,101 @@ def format_card_one_line(cards,card_name):
 def magic_prompt():
   val = '' 
   cards = load_cards()
+  player = None
 
   attrs = ['types','subtypes','colorIdentity']
+
   while val != 'exit':
-    val = raw_input('> ')
+    val = raw_input('> ').strip()
     try:
       evaluated = eval(val)
     except:
       evaluated = None
-
     if val == 'all':
       for name in cards: 
         print(name)
       print('')
+
+    # PLAYER COMMANDS
+    elif val.split()[0] == 'player':
+      if len(val.split()) > 1:
+        player_name = val.split()[1]
+        if os.path.isfile(PLAYER_DIR+player_name+'.json'):
+          player = player_name
+          print(pink(player_name.upper()))
+        else:
+          print('Player {} does not exist'.format(player_name))
+    elif val.split()[0] == 'put' and len(val.split()) >= 3:
+      if not player: player = prompt_for_player(player)
+      if len(val.split()) == 4:
+        idx = val.split()[3]
+        if idx.isdigit(): idx = int(idx)
+        else: idx = 0
+      else:
+        idx = 0
+      card_id = val.split()[1]
+      list_name = val.split()[2]
+      if card_id.isdigit() and list_name in lists:
+        success = remove_card_from_player(player,card_id)
+        if success:
+          def f(data):
+            data[list_name].append(card_id)
+          print('Put card {} in {}'.format(card_id, list_name))
+          work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+          log_move(player,val)
+    elif val == 'draw':
+      if not player: player = prompt_for_player(player)
+      def f(data): 
+        card_id = data['library'].pop(0)
+        data['hand'].append(card_id)
+        print('draw {}'.format(card_id))
+      card_id = work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+      log_move(player,val)
+    elif val.split()[0] == 'play' and len(val.split())==2:
+      if not player: player = prompt_for_player(player)
+      card_id = val.split()[1].strip()
+      if card_id.isdigit():
+        if not player: player = prompt_for_player(player)
+        def f(data):
+          if card_id in data['hand']:
+            data['hand'].remove(card_id)
+            data['board'].append(card_id)  
+          else: 
+            print('Card Not in Hand: {}'.format(card_id))
+        work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+        log_move(player,val)
+    elif val.split()[0] == 'shuffle':
+      if not player: player = prompt_for_player(player)
+      if len(val.split()) == 2 and val.split()[1] in lists:
+        list_name = val.split()[1]
+        def f(data):
+          random.shuffle(data[list_name])
+        work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+        print(list_name+' shuffled')
+        log_move(player,val)
+    elif val.split()[0] in lists:
+      if not player: player = prompt_for_player(player)
+      list_name = val.split()[0]
+      n = None
+      if len(val.split()) == 2:
+        n = val.split()[1]
+        if not n.isdigit(): n = None
+        else: n = int(n)
+      def f(data):
+        print(pink(list_name.upper()))
+        card_map = load_card_map()
+        for card_id in data[list_name][:n]:
+          print(card_id +' : '+format_card_one_line(cards,card_map[card_id]))
+      work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+      log_move(player,val)
+    elif val == 'history':
+      if not player: player = prompt_for_player(player)
+      def f(data):
+        for cmd in data['history']:
+          print(cmd)
+      work_with('{}{}.json'.format(PLAYER_DIR,player),f)
+    # END PLAYER COMMANDS
+
     elif val == 'mapped':
       card_map = load_card_map()
       sorted_ids = sorted([int(e) for e in card_map.keys()])
@@ -334,7 +475,13 @@ def magic_prompt():
       confirmed = raw_input('Are you sure you want to clear all mappings? (y/n): ')
       if confirmed == 'y':
         card_map = {}
+        data = load_json(DATA_FID) 
+        data['libraries'] = {}
+        data['hands'] = {}
+        save_json(DATA_FID,data)
         save_json(CARD_MAP_FID,card_map)
+        clear_players()
+        player = None
     elif not val:
       continue
     elif val.split()[0] == 'save':
