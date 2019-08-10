@@ -367,6 +367,11 @@ def magic_prompt():
       print('')
 
     # PLAYER COMMANDS
+    elif val.split()[0] == 'players':
+      for r, d, f in os.walk(PLAYER_DIR):
+        for fid in f:
+          if '.json' in fid:
+            print(fid.replace('.json',''))
     elif val.split()[0] == 'player':
       if len(val.split()) > 1:
         player_name = val.split()[1]
@@ -377,19 +382,18 @@ def magic_prompt():
           print('Player {} does not exist'.format(player_name))
     elif val.split()[0] == 'put' and len(val.split()) >= 3:
       if not player: player = prompt_for_player(player)
+      idx = 0
       if len(val.split()) == 4:
-        idx = val.split()[3]
-        if idx.isdigit(): idx = int(idx)
-        else: idx = 0
-      else:
-        idx = 0
+        idx_str = val.split()[3].strip()
+        if idx_str.isdigit(): idx = int(idx_str)
+        if idx_str.strip() == 'bottom': idx = 100000
       card_id = val.split()[1]
       list_name = val.split()[2]
       if card_id.isdigit() and list_name in lists:
         success = remove_card_from_player(player,card_id)
         if success:
           def f(data):
-            data[list_name].append(card_id)
+            data[list_name].insert(idx,card_id)
           print('Put card {} in {}'.format(card_id, list_name))
           work_with('{}{}.json'.format(PLAYER_DIR,player),f)
           log_move(player,val)
@@ -544,6 +548,15 @@ def magic_prompt():
       card_name = val.strip(card_id).strip()
       card_map[card_id] = card_name
       save_json(CARD_MAP_FID,card_map)
+    elif val=='help':
+      f = open('README.md')
+      at_cmds = False
+      for line in f:
+        if line.strip() == 'COMMANDS':
+          at_cmds = True
+        if at_cmds:
+          print(line.strip())
+      f.close()
     elif val=='exit':
       return
     elif '//' in val:
