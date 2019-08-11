@@ -205,11 +205,12 @@ def filter_cards(cards,filters):
     hits = 0
     for attr, attr_val in filters.items():
       if attr in card:
-        if type(card[attr]) is list:
+        if type(card[attr]) in [list,str,unicode]:
           if attr_val in card[attr]:
             hits += 1
         elif attr_val == card[attr]:
           hits += 1
+
     if hits == len(filters): new_cards[name] = card
   return new_cards
 
@@ -281,10 +282,14 @@ def deck_stats(cards,deck_name):
     mana_f = (' '*(15-len(mana)))+mana
     print('{}% - {} - {} {} {}'.format(percent_f,freq_f,mana_f,typeID,name))
   freqs = {}
+  mana_types = ['B','W','R','U','G']
+  mana_freqs = {mt:0 for mt in mana_types}
+  total_mana_cost = 0
   for name in deck:
     nameID = name.split('//')[0].strip() if '//' in name else name
     card = cards[nameID]
     cmc = card['convertedManaCost'] 
+    total_mana_cost += int(cmc)
     if cmc not in freqs: 
       keys = ['L','C','S','I','A','E','P','Total']
       freqs[cmc] = {k:0 for k in keys}
@@ -297,6 +302,9 @@ def deck_stats(cards,deck_name):
     elif 'Artifact' in types: freqs[cmc]['A'] += 1
     elif 'Enchantment' in types: freqs[cmc]['E'] += 1
     elif 'Planeswalker' in types: freqs[cmc]['P'] += 1
+    if 'manaCost' in card: 
+      for mt in mana_types:
+        mana_freqs[mt] += card['manaCost'].count(mt)
   
   cost_freqs = freqs.items()
   cost_freqs.sort(key=lambda e:e[0])
@@ -315,6 +323,12 @@ def deck_stats(cards,deck_name):
     prop_f = ' '+str(int(((freqs['Total']+.0) / n)*100)) + '%'
     cols = (' {}'*9)
     print(cols.format(cmc_f,l,c,s,i,a,e,p,prop_f))
+  print('Mana Costs:')
+  for mt,freq in mana_freqs.items():
+    format_freq = lambda e:' '*(3-len(e))+e
+    freq_f = format_freq(str(freq))
+    percent_f = format_freq(str(int(float(freq)/total_mana_cost*100)))
+    print('{} : {}  {}%'.format(mt,freq_f,percent_f))
   print('{} Cards'.format(len(deck)))
 
 def test_hand(cards,deck_name):
@@ -348,12 +362,20 @@ def format_card_one_line(cards,card_name):
   manaCost = getManaCost(cards, card_name)
   return '{} {}'.format(card['name'],manaCost)
 
+def all_attrs(cards):
+  attrs = []
+  for c in cards.values():
+    for attr in c:
+      if attr not in attrs:
+        attrs.append(attr)
+  return attrs
+
 def magic_prompt():
   val = '' 
   cards = load_cards()
   player = None
 
-  attrs = ['types','subtypes','colorIdentity']
+  attrs = all_attrs(cards) 
 
   while val != 'exit':
     val = raw_input('> ').strip()
@@ -454,6 +476,30 @@ def magic_prompt():
       card_map = load_card_map()
       sorted_ids = sorted([int(e) for e in card_map.keys()])
       print(','.join([str(e) for e in sorted_ids]))
+    elif val == 'attributes':
+      for attr in attrs:
+        print(attr)
+    elif val.split()[0] == 'list' and val.split()[1] in attrs:
+      attr = val.split()[1]
+      attr_type_freqs = {}
+      for c in cards.values():
+        if attr in c:
+          v = c[attr]
+          if type(v) is list:
+            for e in v:
+              if e not in attr_type_freqs:
+                attr_type_freqs[e] = 0
+              attr_type_freqs[e] += 1
+          else:
+            if v not in attr_type_freqs:
+              attr_type_freqs[v] = 0
+            attr_type_freqs[v] += 1
+
+      # Display
+      attr_type_freqs_items = attr_type_freqs.items()
+      attr_type_freqs_items.sort(key=lambda e:e[0])
+      for attr_type, freq in attr_type_freqs_items:
+        print(u'{} : {}'.format(attr_type, freq))
     elif val == 'list':
       card_map = load_card_map()
       sorted_map = sorted([(int(i),c) for i,c in card_map.items()])
