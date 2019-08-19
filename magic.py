@@ -355,12 +355,19 @@ def test_hand(cards,deck_name):
   f.close()
 
 def format_card_one_line(cards,card_name):
-  if card_name not in cards:
-    print('Card Does Not Exist: {}'.format(card_name))
-    return
-  card = cards[card_name]
-  manaCost = getManaCost(cards, card_name)
-  return '{} {}'.format(card['name'],manaCost)
+  if '//' in card_name:
+    card_1 = card_name.split('//')[0].strip()
+    card_2 = card_name.split('//')[1].strip()
+    formatted_1 = format_card_one_line(cards, card_1)
+    formatted_2 = format_card_one_line(cards, card_2)
+    return formatted_1 + ' // ' + formatted_2
+  else:
+    if card_name not in cards:
+      print('Card Does Not Exist: {}'.format(card_name))
+      return 'DNE'
+    card = cards[card_name]
+    manaCost = getManaCost(cards, card_name)
+    return '{} {}'.format(card['name'],manaCost)
 
 def all_attrs(cards):
   attrs = []
@@ -383,7 +390,9 @@ def magic_prompt():
       evaluated = eval(val)
     except:
       evaluated = None
-    if val == 'all':
+    if not val:
+      continue
+    elif val == 'all':
       for name in cards: 
         print(name)
       print('')
@@ -461,7 +470,7 @@ def magic_prompt():
         print(pink(list_name.upper()))
         card_map = load_card_map()
         for card_id in data[list_name][:n]:
-          print(card_id +' : '+format_card_one_line(cards,card_map[card_id]))
+          print(card_id +u' : '+format_card_one_line(cards,card_map[card_id]))
       work_with('{}{}.json'.format(PLAYER_DIR,player),f)
       log_move(player,val)
     elif val == 'history':
@@ -479,7 +488,7 @@ def magic_prompt():
     elif val == 'attributes':
       for attr in attrs:
         print(attr)
-    elif val.split()[0] == 'list' and val.split()[1] in attrs:
+    elif val.split()[0] == 'list' and len(val.split()) == 2 and val.split()[1] in attrs:
       attr = val.split()[1]
       attr_type_freqs = {}
       for c in cards.values():
@@ -504,14 +513,7 @@ def magic_prompt():
       card_map = load_card_map()
       sorted_map = sorted([(int(i),c) for i,c in card_map.items()])
       for card_id, card_name in sorted_map:
-        if '//' in card_name:
-          card_1 = card_name.split('//')[0].strip()
-          card_2 = card_name.split('//')[1].strip()
-          formatted_1 = format_card_one_line(cards, card_1)
-          formatted_2 = format_card_one_line(cards, card_2)
-          formatted_card = formatted_1 + ' // ' + formatted_2
-        else:
-          formatted_card = format_card_one_line(cards, card_name)
+        formatted_card = format_card_one_line(cards, card_name)
         print(str(card_id) + ' : '+formatted_card)
     elif val == 'list transforms':
       data = load_json(DATA_FID) 
@@ -532,8 +534,6 @@ def magic_prompt():
         save_json(CARD_MAP_FID,card_map)
         clear_players()
         player = None
-    elif not val:
-      continue
     elif val.split()[0] == 'save':
       save_name = val[5:] 
       save_map(save_name+CARD_MAP_SUFFIX+'.json')
