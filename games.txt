@@ -3,5 +3,6 @@ kitties: 28, blood_mamas: 0, aug.10.2019, 8T
 blood_mamas: 11, dragon_ash: 0, aug.11.2019, 9T
 blood_mamas: 19, blue_green_nexus: 0, aug.12.2019, 5T
 kitties: 27, blood_mamas: 0, aug.16.2019, 6T
+manaless_dredge: 18, death_control: 0, 4T
 
 
