@@ -587,13 +587,6 @@ def magic_prompt():
       else:
         card_name = card_map[card_id]
         print(format_card(cards, card_name))
-    elif val.split()[0].isdigit():
-      # mapping is being entered
-      card_map = load_card_map()
-      card_id = val.split()[0]
-      card_name = val.strip(card_id).strip()
-      card_map[card_id] = card_name
-      save_json(CARD_MAP_FID,card_map)
     elif val=='help':
       f = open('README.md')
       at_cmds = False
