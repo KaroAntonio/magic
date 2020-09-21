@@ -205,11 +205,14 @@ def filter_cards(cards,filters):
     hits = 0
     for attr, attr_val in filters.items():
       if attr in card:
-        if type(card[attr]) in [list,str,unicode]:
+        if attr_val == [] and card[attr] == attr_val:
+          hits += 1
+        elif type(card[attr]) in [list,str,unicode]:
           if attr_val in card[attr]:
             hits += 1
         elif attr_val == card[attr]:
           hits += 1
+          
 
     if hits == len(filters): new_cards[name] = card
   return new_cards
